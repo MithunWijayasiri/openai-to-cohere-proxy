@@ -11,6 +11,13 @@ module.exports = async (req, res) => {
   }
 
   try {
+    // Get Cohere API key from request header
+    const cohereApiKey = req.headers['x-cohere-api-key'];
+    
+    if (!cohereApiKey) {
+      return res.status(401).json({ error: 'Cohere API key is required in the X-Cohere-API-Key header' });
+    }
+
     // Extract relevant fields from OpenAI request
     const { model, messages, max_tokens, temperature } = req.body;
 
@@ -41,7 +48,7 @@ module.exports = async (req, res) => {
       cohereRequest,
       {
         headers: {
-          Authorization: `Bearer ${process.env.COHERE_API_KEY}`,
+          Authorization: `Bearer ${cohereApiKey}`,
           'Content-Type': 'application/json'
         }
       }
