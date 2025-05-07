@@ -9,8 +9,19 @@
     "deploy": "vercel --prod"
   },
   "dependencies": {
-    "axios": "^1.6.8"
+    "axios": "^1.9.0",
+    "express": "^5.1.0"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MithunWijayasiri/openai-to-cohere-proxy.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/MithunWijayasiri/openai-to-cohere-proxy/issues"
+  },
+  "homepage": "https://github.com/MithunWijayasiri/openai-to-cohere-proxy#readme"
 }

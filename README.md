@@ -43,13 +43,6 @@ curl -X POST https://your-vercel-deployment.vercel.app/v1/chat/completions \
     ]
   }'
 ```
-
-## Using with Brave Leo
-
-1. Deploy this proxy to Vercel
-2. In Brave Leo settings, set your API endpoint to your Vercel deployment URL
-3. Add your Cohere API key in the API key field - it will be automatically sent in the request header
-
 ## Scripts
 
 - `npm run dev` — Run locally with Vercel dev server.

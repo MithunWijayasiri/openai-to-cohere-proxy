@@ -1,15 +1,1 @@
-{
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/openai-to-cohere.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/v1/chat/completions",
-      "dest": "/api/openai-to-cohere.js"
-    }
-  ]
-}
+{ "version": 2, "builds": [{ "src": "api/*.js", "use": "@vercel/node" }] }
