@@ -23,5 +23,6 @@
   "bugs": {
     "url": "https://github.com/MithunWijayasiri/openai-to-cohere-proxy/issues"
   },
-  "homepage": "https://github.com/MithunWijayasiri/openai-to-cohere-proxy#readme"
+  "homepage": "https://github.com/MithunWijayasiri/openai-to-cohere-proxy#readme",
+  "devDependencies": {}
 }

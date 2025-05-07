@@ -6,7 +6,7 @@ const axios = require('axios');
  */
 module.exports = async (req, res) => {
   // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Allow any origin
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Cohere-API-Key');
 
@@ -31,12 +31,14 @@ module.exports = async (req, res) => {
     }
 
     if (!cohereApiKey) {
+      console.error("API key is missing from request.");
       return res.status(401).json({ error: 'API key is required in either Authorization header (Bearer <token>) or X-Cohere-API-Key header' });
     }
 
     const { model, messages, max_tokens, temperature, stream } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
+      console.error("Messages array is missing or not an array in request body.");
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
@@ -118,6 +120,7 @@ module.exports = async (req, res) => {
             responseType: 'stream',
           }
         );
+        // console.log("Successfully initiated stream connection with Cohere."); // Optional: keep if you want this high-level log
 
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
@@ -131,99 +134,111 @@ module.exports = async (req, res) => {
             const line = buffer.substring(0, boundary).trim();
             buffer = buffer.substring(boundary + 1);
 
-            if (line.startsWith('{')) { // Correct for newline-delimited JSON objects
-                try {
-                    const cohereEvent = JSON.parse(line); // Correct parsing
-                    let openAIChunk;
-                    let isFinalChunk = false;
+            if (line.startsWith('data: ')) {
+                const jsonData = line.substring(5).trim();
+                if (jsonData) {
+                    try {
+                        const cohereEvent = JSON.parse(jsonData);
+                        let openAIChunk;
+                        let isFinalChunk = false;
 
-                    // Determine generation ID for the chunk
-                    const generationId = cohereEvent.generation_id || 
-                                       (cohereEvent.response && cohereEvent.response.generation_id) || 
-                                       'chatcmpl-stream-' + Date.now();
+                        const generationId = cohereEvent.generation_id || 
+                                           (cohereEvent.response && cohereEvent.response.generation_id) || 
+                                           'chatcmpl-stream-' + Date.now();
 
-                    if (cohereEvent.is_finished === true && cohereEvent.event_type === "stream-end") {
-                        isFinalChunk = true;
-                        let mappedFinishReason = 'stop'; // Default
-                        if (cohereEvent.finish_reason) {
-                            switch(cohereEvent.finish_reason.toUpperCase()) {
-                                case 'COMPLETE': mappedFinishReason = 'stop'; break;
-                                case 'MAX_TOKENS': mappedFinishReason = 'length'; break;
-                                case 'ERROR':
-                                case 'ERROR_TOXIC':
-                                case 'ERROR_LIMIT':
-                                    mappedFinishReason = 'stop'; // Safest for OpenAI compatibility
-                                    console.warn(`Cohere stream ended with reason: ${cohereEvent.finish_reason}. Mapping to 'stop'.`);
-                                    break;
-                                default:
-                                    mappedFinishReason = 'stop';
-                                    console.warn(`Cohere stream ended with unknown reason: ${cohereEvent.finish_reason}. Mapping to 'stop'.`);
+                        if (cohereEvent.is_finished === true && cohereEvent.event_type === "stream-end") {
+                            isFinalChunk = true;
+                            let mappedFinishReason = 'stop';
+                            if (cohereEvent.finish_reason) {
+                                switch(cohereEvent.finish_reason.toUpperCase()) {
+                                    case 'COMPLETE': mappedFinishReason = 'stop'; break;
+                                    case 'MAX_TOKENS': mappedFinishReason = 'length'; break;
+                                    case 'ERROR': case 'ERROR_TOXIC': case 'ERROR_LIMIT':
+                                        mappedFinishReason = 'stop';
+                                        console.warn(`Cohere stream ended with reason: ${cohereEvent.finish_reason}. Mapping to 'stop'.`);
+                                        break;
+                                    default:
+                                        mappedFinishReason = 'stop';
+                                        console.warn(`Cohere stream ended with unknown reason: ${cohereEvent.finish_reason}. Mapping to 'stop'.`);
+                                }
                             }
+                            openAIChunk = {
+                                id: generationId,
+                                object: 'chat.completion.chunk',
+                                created: Math.floor(Date.now() / 1000),
+                                model: cohereRequestPayload.model,
+                                choices: [{
+                                    index: 0,
+                                    delta: {},
+                                    finish_reason: mappedFinishReason,
+                                }],
+                                usage: cohereEvent.response && cohereEvent.response.meta && cohereEvent.response.meta.billed_units ? {
+                                    prompt_tokens: cohereEvent.response.meta.billed_units.input_tokens || 0,
+                                    completion_tokens: cohereEvent.response.meta.billed_units.output_tokens || 0,
+                                    total_tokens: (cohereEvent.response.meta.billed_units.input_tokens || 0) + (cohereEvent.response.meta.billed_units.output_tokens || 0),
+                                } : undefined,
+                            };
+                        } else if (cohereEvent.event_type === 'text-generation' && cohereEvent.text !== undefined) {
+                            openAIChunk = {
+                                id: generationId,
+                                object: 'chat.completion.chunk',
+                                created: Math.floor(Date.now() / 1000),
+                                model: cohereRequestPayload.model,
+                                choices: [{
+                                    index: 0,
+                                    delta: { content: cohereEvent.text },
+                                    finish_reason: null,
+                                }],
+                            };
+                        } else if (cohereEvent.event_type === "stream-start") {
+                            // Usually no chunk to send to OpenAI for stream-start
+                        } else {
+                             // Log unhandled event types if they occur and aren't handled
+                             console.log(`Unhandled Cohere event_type: ${cohereEvent.event_type}, is_finished: ${cohereEvent.is_finished}`);
                         }
 
-                        openAIChunk = {
-                            id: generationId,
-                            object: 'chat.completion.chunk',
-                            created: Math.floor(Date.now() / 1000),
-                            model: cohereRequestPayload.model,
-                            choices: [{
-                                index: 0,
-                                delta: {},
-                                finish_reason: mappedFinishReason,
-                            }],
-                            usage: cohereEvent.response && cohereEvent.response.meta && cohereEvent.response.meta.billed_units ? {
-                                prompt_tokens: cohereEvent.response.meta.billed_units.input_tokens || 0,
-                                completion_tokens: cohereEvent.response.meta.billed_units.output_tokens || 0,
-                                total_tokens: (cohereEvent.response.meta.billed_units.input_tokens || 0) + (cohereEvent.response.meta.billed_units.output_tokens || 0),
-                            } : undefined,
-                        };
-                    } else if (cohereEvent.event_type === 'text-generation' && cohereEvent.text !== undefined) { // check cohereEvent.text is not undefined
-                        openAIChunk = {
-                            id: generationId,
-                            object: 'chat.completion.chunk',
-                            created: Math.floor(Date.now() / 1000),
-                            model: cohereRequestPayload.model,
-                            choices: [{
-                                index: 0,
-                                delta: { content: cohereEvent.text }, // Can be empty string, so check for undefined previously
-                                finish_reason: null,
-                            }],
-                        };
-                    }
+                        if (openAIChunk) {
+                            res.write(`data: ${JSON.stringify(openAIChunk)}\n\n`);
+                        }
 
-                    if (openAIChunk) {
-                        res.write(`data: ${JSON.stringify(openAIChunk)}\n\n`);
+                        if (isFinalChunk) {
+                            res.write(`data: [DONE]\n\n`);
+                            if (!res.writableEnded) res.end();
+                            if (cohereStreamResponse.data.destroy) {
+                                cohereStreamResponse.data.destroy();
+                            }
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing JSON from Cohere data line:', e, "JSON Data:", jsonData);
                     }
-                    if (isFinalChunk) {
-                        res.write(`data: [DONE]\n\n`);
-                        if (!res.writableEnded) res.end();
-                        if (cohereStreamResponse.data.destroy) cohereStreamResponse.data.destroy();
-                        return;
-                    }
-                } catch (e) {
-                    console.error('Error parsing streaming line from Cohere:', e, "Line:", line);
                 }
+            } else if (line.startsWith('event: ')) {
+                // Ignoring Cohere event line
+            } else if (line) { 
+                // console.log("UNKNOWN OR UNHANDLED COHERE LINE:", line); // Optional: keep if strict line checking is needed
             }
           }
         });
 
         cohereStreamResponse.data.on('end', () => {
           if (!res.writableEnded) {
-            console.warn('Cohere stream ended without a final stream-end event or res was not ended.');
+            console.warn('Cohere stream ended, but res was not ended by parsing logic. Sending [DONE] now as a fallback.');
             res.write(`data: [DONE]\n\n`);
             res.end();
           }
         });
 
         cohereStreamResponse.data.on('error', (err) => {
-          console.error('Stream error from Cohere:', err);
+          console.error('Stream error from Cohere:', err.message);
           if (!res.writableEnded) {
             res.status(500).end(JSON.stringify({ error: 'Stream error from Cohere API' }));
           }
         });
 
       } catch (error) {
-        console.error('Error setting up Cohere stream:', error.response ? error.response.data : error.message);
+        console.error('Error setting up Cohere stream:', error.message);
+        if (error.response) console.error('Cohere error response data:', error.response.data);
         if (!res.writableEnded) {
           res.status(500).json({
             error: 'Failed to stream from Cohere API',
@@ -279,12 +294,18 @@ module.exports = async (req, res) => {
         openAIResponse.usage.completion_tokens = bu.output_tokens || 0;
         openAIResponse.usage.total_tokens = (bu.input_tokens || 0) + (bu.output_tokens || 0);
       }
-
       res.status(200).json(openAIResponse);
     }
 
   } catch (error) {
-    console.error('Proxy Error:', error.response ? JSON.stringify(error.response.data, null, 2) : error.message);
+    console.error('Proxy caught error:', error.message);
+    if (error.response) {
+        console.error('Error Response Data:', JSON.stringify(error.response.data, null, 2));
+        console.error('Error Response Status:', error.response.status);
+    } else {
+        console.error('Error (no response object):', error);
+    }
+    
     const status = error.isAxiosError && error.response ? error.response.status : 500;
     const errorDetails = error.isAxiosError && error.response ? error.response.data : { message: error.message };
     
