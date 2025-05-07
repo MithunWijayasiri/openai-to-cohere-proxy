@@ -37,9 +37,9 @@ module.exports = async (req, res) => {
     const cohereRequest = {
       message: messages[messages.length - 1].content, // Last message as prompt
       chat_history: cohereMessages.slice(0, -1), // Previous messages as history
-      max_tokens: max_tokens || 512,
-      temperature: temperature || 0.7,
-      model: model || 'command-r-plus' // Map to a Cohere model
+      max_tokens: max_tokens,
+      temperature: temperature || 0.3,
+      model: model || 'command-a-03-2025' // Map to a Cohere model
     };
 
     // Make request to Cohere API
@@ -59,7 +59,7 @@ module.exports = async (req, res) => {
       id: cohereResponse.data.generation_id || 'cohere-' + Date.now(),
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: model || 'command-r-plus',
+      model: model || 'command-a-03-2025',
       choices: [
         {
           index: 0,
