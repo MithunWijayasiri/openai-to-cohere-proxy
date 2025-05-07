@@ -2,6 +2,8 @@
 
 A Vercel serverless proxy that translates OpenAI API requests (`/v1/chat/completions`) to Cohere's API, enabling Cohere models to be used as a drop-in replacement for OpenAI's chat completions endpoint. This proxy supports both standard and streaming responses.
 
+- Visit [cohere.com](https://cohere.com/) to get your free API key.
+
 ## Features
 
 -   **OpenAI Compatibility:** Translates requests and responses between OpenAI and Cohere formats.
