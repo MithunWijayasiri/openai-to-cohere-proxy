@@ -1,7 +1,7 @@
 {
   "name": "openai-to-cohere-proxy",
   "version": "1.0.0",
-  "description": "Proxy server to translate OpenAI API requests to Cohere API for Vercel.",
+  "description": "Proxy server to translate OpenAI API requests to Cohere API via Vercel.",
   "main": "api/openai-to-cohere.js",
   "scripts": {
     "dev": "vercel dev",
